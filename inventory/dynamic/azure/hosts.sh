@@ -12,4 +12,4 @@ if ! out="$( ansible-playbook --inventory-file "${src}/none" ${src}/../../../pla
   exit 1
 fi
 . "/tmp/azure-inventory.sh"
-exec ${src}/hosts.py
+exec ${src}/hosts.py --debug
