@@ -16,7 +16,7 @@ RUN INSTALL_PKGS="python-lxml python-dns pyOpenSSL python2-cryptography openssl 
  && yum install -y --setopt=tsflags=nodocs $EPEL_PKGS \
  && yum install -y --setopt=tsflags=nodocs --enablerepo=epel-testing $EPEL_TESTING_PKGS \
  && rpm -V $INSTALL_PKGS $EPEL_PKGS $EPEL_TESTING_PKGS \
- && pip install 'apache-libcloud~=2.2.1' 'ansible[azure]' \
+ && pip install 'apache-libcloud~=2.2.1' 'SecretStorage<3' 'ansible[azure]' \
  && yum clean all
 
 LABEL name="openshift/origin-ansible" \

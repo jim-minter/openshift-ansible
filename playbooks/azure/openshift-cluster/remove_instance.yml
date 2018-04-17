@@ -1,8 +1,0 @@
----
-- name: "Remove instance used to build image"
-  hosts: localhost
-  tasks:
-  - name: "rm vm"
-    import_role:
-      name: openshift_azure
-      tasks_from: remove_instance.yml

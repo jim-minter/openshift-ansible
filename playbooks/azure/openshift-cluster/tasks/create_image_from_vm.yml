@@ -1,0 +1,32 @@
+---
+- azure_rm_virtualmachine:
+    name: vm
+    resource_group: "{{ openshift_azure_resource_group_name }}"
+    allocated: no
+  register: vm
+
+- command: az vm generalize --resource-group "{{ openshift_azure_resource_group_name }}" --name vm
+
+- azure_rm_resourcegroup:
+    name: "{{ image_resource_group }}"
+    location: "{{ openshift_azure_resource_location }}"
+
+- shell: TZ=Etc/UTC date +%Y%m%d%H%M
+  register: now
+
+# Note: requires ansible 2.5
+- azure_rm_image:
+    resource_group: "{{ image_resource_group }}"
+    name: "{{ image_prefix }}-{{ now.stdout }}"
+    source: "{{ vm.ansible_facts.azure_vm.properties.storageProfile.osDisk.managedDisk.id }}"
+    os_type: Linux
+
+- set_fact:
+    final_tags: "{{ input_image_tags.stdout | from_json | combine(image_tags) }}"
+
+- command: >
+    az resource tag
+    --resource-type Microsoft.Compute/images
+    -g "{{ image_resource_group }}"
+    -n "{{ image_prefix }}-{{ now.stdout }}"
+    --tags {% for k in final_tags %}{{ k }}={{ final_tags[k] }} {% endfor %}

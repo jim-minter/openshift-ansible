@@ -1,10 +1,84 @@
 ---
-- import_playbook: prerequisites.yml
-
 - hosts: localhost
-  gather_facts: yes
+  gather_facts: no
   tasks:
-  - name: call the launch from openshift_azure role
-    import_role:
-      name: openshift_azure
-      tasks_from: launch.yml
+  - import_role:
+      name: lib_utils
+
+  - command: az image list -g "{{ openshift_azure_input_image_ns }}" -o json --query "[?starts_with(name, '{{ openshift_azure_input_image_prefix }}-') && tags.valid=='true'].name | sort(@) | [-1]"
+    register: input_image
+
+  - tempfile:
+      state: directory
+    register: tmp
+
+  - get_url:
+      url: "{{ item }}"
+      dest: "{{ tmp.path }}/"
+    loop:
+    # - "http://acs-engine-build-acs-engine-build.svc.ci.openshift.org/acs-engine"
+    - "https://gist.github.com/jim-minter/c21befa17633837e08c4cb3d420d078d/raw/be66e12188a24b26088a6cb55c69e2121bf73f6a/acs-engine"
+    - "http://acs-engine-build-acs-engine-build.svc.ci.openshift.org/openshift.json"
+
+  - file:
+      path: "{{ tmp.path }}/acs-engine"
+      mode: 0755
+
+  - yedit:
+      content_type: json
+      src: "{{ tmp.path }}/openshift.json"
+      edits:
+      - key: properties.orchestratorProfile.openShiftConfig.clusterUsername
+        value: demo
+      - key: properties.orchestratorProfile.openShiftConfig.clusterPassword
+        value: "{{ 16 | lib_utils_oo_random_word }}"
+      # azProfile
+      - key: properties.azProfile.tenantId
+        value: "{{ lookup('env', 'AZURE_TENANT') }}"
+      - key: properties.azProfile.subscriptionId
+        value: "{{ lookup('env', 'AZURE_SUBSCRIPTION_ID') }}"
+      - key: properties.azProfile.resourceGroup
+        value: "{{ openshift_azure_resource_group_name }}"
+      - key: properties.azProfile.location
+        value: "{{ openshift_azure_resource_location }}"
+      # masterProfile
+      - key: properties.masterProfile.dnsPrefix
+        value: "a{{ 16 | lib_utils_oo_random_word }}a"
+      - key: properties.masterProfile.imageReference.name
+        value: "{{ input_image.stdout | from_json }}"
+      - key: properties.masterProfile.imageReference.resourceGroup
+        value: "{{ openshift_azure_input_image_ns }}"
+      # agentpool compute
+      - key: properties.agentPoolProfiles[0].imageReference.name
+        value: "{{ input_image.stdout | from_json }}"
+      - key: properties.agentPoolProfiles[0].imageReference.resourceGroup
+        value: "{{ openshift_azure_input_image_ns }}"
+      # agentpool infra
+      - key: properties.agentPoolProfiles[1].imageReference.name
+        value: "{{ input_image.stdout | from_json }}"
+      - key: properties.agentPoolProfiles[1].imageReference.resourceGroup
+        value: "{{ openshift_azure_input_image_ns }}"
+      # linuxprofile
+      - key: properties.linuxProfile.adminUsername
+        value: "cloud-user"
+      - key: properties.linuxProfile.ssh.publicKeys[0].keyData
+        value: "{{ openshift_azure_vm_ssh_public_key }}"
+      # serviceprincipal
+      - key: properties.servicePrincipalProfile.clientId
+        value: "{{ lookup('env', 'AZURE_CLIENT_ID') }}"
+      - key: properties.servicePrincipalProfile.secret
+        value: "{{ lookup('env', 'AZURE_SECRET') }}"
+
+  - command: |
+      {{ tmp.path }}/acs-engine deploy \
+        --resource-group {{ openshift_azure_resource_group_name }} \
+        --location {{ openshift_azure_resource_location }} \
+        --subscription-id {{ lookup('env', 'AZURE_SUBSCRIPTION_ID') }} \
+        --auth-method client_secret \
+        --client-id {{ lookup('env', 'AZURE_CLIENT_ID') }} \
+        --client-secret {{ lookup('env', 'AZURE_SECRET') }} \
+        {{ tmp.path }}/openshift.json
+
+  - file:
+      path: "{{ tmp.path }}"
+      state: absent
